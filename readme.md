@@ -9,6 +9,11 @@ The mail network is fully-simulated. Instead of randomly generating mail for the
 
 In addition, a visualization of the map and all the mail in transit can be shown at the end of each day.
 
+## Some Player-Facing Mechanics
+The player will sort mail, either stamping it as undeliverable and putting it in the sender's box, or putting it in the recipient's box. If the recipient is in another town, the player will reference a map and forward the mail towards the post office of the appropriate town by putting it in the associated mailbox. The player will have to ensure the address is valid, that there is a stamp and that it is sufficient, that the mail is undamaged, and more. Sometimes, undeliverable mail doesn't have a return address. In these cases, the player will file the mail in the recovery bin. Mail in this bin may be subject to retrieval. For instance, a sender may submit a form requesting to recover lost mail at the player's post office. In this case, the player will search their local mail recovery bin for the post. If it isn't found, the player should forward the request to the post office that the mail being searched for would have been forwarded to.
+
+These mechanics all become available to the player as they master previous ones. The pretext is that the postmaster will ask the player to set aside mail they don't know how to handle and will teach the player to handle more situations as the game progresses.
+
 ## Mail Simulation
 The game world consists of towns. Each with a set of senders, who can generate new mail, and a post office (referred to as a mail router), which can route mail to local recipients or to other post offices. The player controls one of these mail routers.
 Each day, every mail router (other than the player) will automatically sort mail according to the complete set of rules listed below and the mail will be delivered to the next step in the mail route. There is a small chance for each mail item handled to be handled improperly. Mail routed to the player will be added to their stack of mail to sort.
