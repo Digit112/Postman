@@ -1,0 +1,14 @@
+{
+	"language": "english",
+	"world_gen": {
+		"tsm": 1,
+		"nct": 4,
+		"nat": 12,
+		"min_town_sep": 60
+	},
+	
+	"difficulty": {
+		"mqm": 1
+	}
+}
+		

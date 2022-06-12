@@ -56,3 +56,29 @@ For simplicity, the network formed by the postal offices will always be simply-c
 The game world consists of towns, which have locations on the map and zip codes. Each town contains 3-8 streets, each of which has 4-12 homes, and each of those may have 1-3 senders. None of these components have actual locations on the map, they are simply used to generate coherent addresses shown on the mail. This is the alternative to randomly generating the addresses for each individual piece of post. Hopefully, this makes the world feel less abstract.
 
 The player's town is generated with a few dozen senders. This number is designed so that the player comes to recognize their names over time. Four towns are generated within a disk around the player's town, and all are connected to the player's town. One of these four is very large (many senders), one is medium, and two are small. After that, six additional towns are randomly generated outside this disk, and each is connected to the nearest town (but never to the player's town). Each of these towns is in the small-to medium size range.
+
+### Town Generation
+Each town randomly genrates a random floating-point value for the number of streets via a normal distribution (mu=5.5, s=0.7). Each does the same to determine the number of houses, with a normal distribution of (mu=8, s=1.3) and each house generates the number of senders with (mu=1.8, s=0.6). Because the product of these value's means approximately govern the town's mean population, the *cube root* of the town size multiplier is multiplied by every random value. These values are then rounded to the nearest integer or up to the minimum value. The minimum number of streets is 2, the minimum number of houses is 2, and the minimum number of senders is 1. Some (~5% of) houses randomly skip sender generation, creating empty houses.
+
+## Settings
+
+### World Generation
+**Town Size Multiplier**: The average number of residents in each town is multiplied by this number. At a multiplier of 1, the average town will have 80 residents. (Default: 1)
+**Number of Connecting Towns**: The number of towns that generate that are directly connected to the player's town. (Default: 4)
+**Number of Additional Towns**: The number of towns that generate which don't connect directly to the player's town. (Default: 6)
+
+## Hidden Settings
+
+## World Generation
+**min_town_sep**: The minimum allowable distance between two towns during generation.
+
+## Day Specification
+
+All days are enumerated in "days.json". All probabilites are given as decimals (i.e. 0.12 = 12%)
+
+**prob_sender_shortpays**: Probability that the mail will have invalid indicia (insufficient/missing stamp). If the due postage is low (sender and recipient are in the same town), this will cause the stamp to be missing. If the postage due is high, there is an equal chance the stamp will be missing or insufficient.
+
+**prob_sender_damages_mail**: Probability that mail will be damaged upon generation.
+**prob_router_damages_mail**: Probability that a simulated post office will damage mail. The next post office on the route will have to repair it.
+
+**prob_sender_moves**: Probability that a sender will move to an empty home and make a request to forward mail.

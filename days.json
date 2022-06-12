@@ -1,0 +1,9 @@
+{
+	"standard": {
+		"prob_sender_short_pays": 0.02,
+		"prob_sender_damages_mail": 0.02,
+		"prob_router_damages_mail": 0.02,
+		
+		"prob_sender_moves": 0.1
+	}
+}

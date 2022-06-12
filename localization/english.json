@@ -1,0 +1,21 @@
+{
+	"menu": {
+		"main": {
+			"play": "Play",
+			"settings": "Settings"
+		},
+		"world_gen": {
+			"tsm": "Town Size Multiplier",
+			"tsm_desc": "Multiplier for the average number of people in a town.",
+			
+			"nct": "Number of Connecting Towns",
+			"nct_desc": "Number of towns connecting directly to the player's town.",
+			
+			"nat": "Number of Additional Towns",
+			"nat_desc": "Number of towns not connecting directly to the player's town."
+		}
+	},
+	
+	"dialogue": {
+	}
+}
