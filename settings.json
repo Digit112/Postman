@@ -1,14 +1,14 @@
 {
 	"language": "english",
 	"world_gen": {
-		"tsm": 1,
-		"nct": 4,
-		"nat": 12,
-		"min_town_sep": 60
+		"town_size_mul": 1,
+		"num_connecting_towns": 6,
+		"num_additional_towns": 160,
+		"min_town_sep": 20
 	},
 	
 	"difficulty": {
-		"mqm": 1
+		"mail_mul": 1
+		"max_mail_mul": 1
 	}
 }
-		

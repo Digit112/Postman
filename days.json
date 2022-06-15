@@ -4,6 +4,10 @@
 		"prob_sender_damages_mail": 0.02,
 		"prob_router_damages_mail": 0.02,
 		
-		"prob_sender_moves": 0.1
+		"prob_sender_moves": 0.1,
+		
+		"new_mail_quota": 3,
+		"mail_quota": 10,
+		"mail_limit": 20
 	}
 }

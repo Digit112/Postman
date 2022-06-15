@@ -64,13 +64,22 @@ Each town randomly genrates a random floating-point value for the number of stre
 
 ### World Generation
 **Town Size Multiplier**: The average number of residents in each town is multiplied by this number. At a multiplier of 1, the average town will have 80 residents. (Default: 1)
+
 **Number of Connecting Towns**: The number of towns that generate that are directly connected to the player's town. (Default: 4)
+
 **Number of Additional Towns**: The number of towns that generate which don't connect directly to the player's town. (Default: 6)
+
+### Difficulty
+
+**Mail Multiplier**: The mail quota, new mail quota, and max mail are multiplied by this value.
 
 ## Hidden Settings
 
-## World Generation
+### World Generation
 **min_town_sep**: The minimum allowable distance between two towns during generation.
+
+### Difficulty
+**max_mail_mul**: The max mail is multiplied by this value. Can be increased to gauruntee the player handle's all mail without increasing the quota.
 
 ## Day Specification
 
@@ -79,6 +88,42 @@ All days are enumerated in "days.json". All probabilites are given as decimals (
 **prob_sender_shortpays**: Probability that the mail will have invalid indicia (insufficient/missing stamp). If the due postage is low (sender and recipient are in the same town), this will cause the stamp to be missing. If the postage due is high, there is an equal chance the stamp will be missing or insufficient.
 
 **prob_sender_damages_mail**: Probability that mail will be damaged upon generation.
+
 **prob_router_damages_mail**: Probability that a simulated post office will damage mail. The next post office on the route will have to repair it.
 
 **prob_sender_moves**: Probability that a sender will move to an empty home and make a request to forward mail.
+
+**new_mail_quota**: The amount of brand-new mail the player must handle this day.
+
+**mail_quota**: The amount of mail the player must handle on this day.
+
+**mail_limit**: The maximum amount of mail the player can handle this day.
+
+## Post Office AI
+The AI does not actually exist on a post office class or the town class. Actually, the AI is encapsulated in the mail.handle() function, which changes variables within the mail class to allow it to transit.
+
+The mail class maintains three relevant variables; these are the previous, current, and following variables. Each holds a town or a house and allows you to check where the mail was, where it is, and where it is going. When mail is created, previous is set to the sender, current is set to the sender's town, and following is set to None. The purpose of the handle() function is to set value of mail.following. Note that artificial error is introduced at this stage. mail.following is set to where the mail *will* go, not necessarily where it *should* go.
+
+The mail.advance() function moves the mail by updating the variables appropriately.
+
+## Main Loop
+
+The game operates on a central loop of actions outlined below.
+
+1 Day begins
+
+2 If there are any morning sequences due, play them.
+
+3 Prepare the mail queue for each player. This is done by moving mail from the PO's queue to the player's queue as needed. Ideally, all mail for the PO would be handled by the player, but some may be handled automatically to limit the player's workload.
+
+	1 Any mail in the PO's queue marked as story mail is moved to the player's queue
+	
+	2 Shuffle the PO's queue
+	
+	2 Move new mail (with age=0) from the PO's queue into the player's queue. Stop when the new mail quota is met, the PO's queue is emptied, or the max mail limit is reached.
+	
+	3 Move all kinds of mail from the PO's queue into the player's queue. Stop when the mail quota is met, the PO's queue is emptied, or the max mail limit is reached.
+	
+	4 Generate new mail until the new mail quota and the general mail quota are met.
+
+Note that in actuality, the POs *don't* track the mail in their queue. The function to handle a mail-item is actually a member of the mail class itself as this removes the overhead of having mail items remove themselves from a queue and re-add themselves to a new one each time they change locations. Because of this, the above steps are actually performed by looping over all the mail and moving them to the appropriate player's queue if they pass an enormous conditional statement, which is broken into several conditionals for readability.
