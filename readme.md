@@ -81,6 +81,17 @@ Each town randomly genrates a random floating-point value for the number of stre
 ### Difficulty
 **max_mail_mul**: The max mail is multiplied by this value. Can be increased to gauruntee the player handle's all mail without increasing the quota.
 
+## Server Specification
+
+Before a world is generated and mail simulated, Postman must load a server specification folder which has three primary objects:
+- A sub-folder called "names" which contains the wordlists from which streets, towns, and people get their names.
+- A sub-folder called "story" which contains the specifiaction for the different rulesets and on which days they apply
+- A file called "server.json" which specifies settings native to that server
+
+### Server Specification
+
+**mode**: "singleplayer", "multiplayer", or "dedicated multiplayer". In singleplayer, inbound TCP connections are not received and a local player object is automatically created and bound to a thread. Multiplayer allows incoming connections and binds them to threads, but is otherwise the same. Dedicated multiplayer also allows incoming connections, but does not create a local player.
+
 ## Day Specification
 
 All days are enumerated in "days.json". All probabilites are given as decimals (i.e. 0.12 = 12%)
@@ -127,3 +138,233 @@ The game operates on a central loop of actions outlined below.
 	4 Generate new mail until the new mail quota and the general mail quota are met.
 
 Note that in actuality, the POs *don't* track the mail in their queue. The function to handle a mail-item is actually a member of the mail class itself as this removes the overhead of having mail items remove themselves from a queue and re-add themselves to a new one each time they change locations. Because of this, the above steps are actually performed by looping over all the mail and moving them to the appropriate player's queue if they pass an enormous conditional statement, which is broken into several conditionals for readability.
+
+## Multiplayer
+
+Each game is a server with which a session can be established by a client. The client creates a **player object** which contacts the server to establish a connection. When the server is contacted, it creates a thread for handling player inputs and forwards messages over this connection to that thread in the form of events added to a queue maintained by the thread. The server also sends information pertinent to each player back to the client over their connection.
+
+### Internal vs. External Communication
+
+The communication between a client player object and a server thread can be either internal or external. In the internal mode, the player object contacts and communicates with the server by calling functions on the game object. Only one such connection can be formed with a postman server. External communications occur over a TCP/IP connection initiated with the server and are authenticated. The server thread converts received messages into equivalent function calls and the connected player object similary processes messages it receives.
+
+### Server Settings
+
+When a postman game is run, it must load server settings (outlined below) from a file. One such setting defines whether the server is singleplayer, multiplayer, or dedicated multiplayer.
+
+A "singleplayer" game prompts the server to disallow external connections and it will not create a TCP socket. Instead, it will create a player object and automatically connect it to a single thread. A default server settings file specifying singleplayer is loaded when you select "New Story" from the main menu.
+
+A "multiplayer" game allows external connections and creates and binds a TCP socket. It also automatically creates a player object and connect it to the server internally. A default server settings file specifying multiplayer is loaded when you select "Multiplayer" > "New Server".
+
+A "dedicated multiplayer" game allows external connections as with multiplayer, but does not create an internally connected client. To create *and play in* such a server, you must launch the game and connect to the server via "Multiplayer" > "Connect to a Server". There is no way to create a dedicated multiplayer server from the base game as there is no option to do so and it does not contain the code to run the headless server GUI. A separate file must be run that loads a server settings file of the user's specification. One such file for a dedicated multiplayer server is provided as it is with the others.
+
+The dedicated server is not wholly justafiable at this time, however an additional multiplayer story could be implemented to justify it so that I can implement this and feel like I'm not wasting effort.
+
+The Diffie-Hellman key exchantge is used to generate a secret key which encrypts all commands sent to a thread, so that the information necessary to send commands to a thread is only held by the thread and the player object that initiated the connection. Each player object initiates a connection prior to map generation via one of two methods; either by sending a message to a TCP port which the game has been configured to listen to or from within the application, by calling a function.
+
+## Postman Protocol
+
+Postman player objects (clients) and interface threads (servers, each bound to 1 client) comminucate via the postman protocol that runs over TCP. A multiplayer game starts one thread that accepts external connections over a socket. The sockets representing individual connections are then passed to newly created threads for handling events and player input.
+
+Each client and server maintains an object that is either a connected TCP socket or an object that implements recv_into() and sendall() such that it can be used as a connected TCP socket, thus circumventing the need for a socket on the loopback interface for singleplayer games.
+
+### Authentication
+
+External connections through TCP are authenticated via 1024-bit RSA. The first thing the game does is generate a public-private RSA key pair and creates an incoming connection-handling thread. This thread opens a socket an listens to incoming connections. As soon as a connection is accepted, the socket which represents the new connection is passed to a function in a new thread with authentication enabled, that manages this connection. The original thread returns to listening for connections. The new thread listens for a request, of which two currently exist: "info" and "join". The former causes the thread to send public server information and destroy itself. The latter begins the authentication procedure.
+
+The join request will have included the public key of the client. The thread immediately responds with the server's public key. From then on, all messages are signed by the sender's private key and encrypted with the recipient's public key. The recipient decrypts and verifies each message. Signatures are generated via PKCS#1 v1.5 (RSA)
+
+### Postman Header
+
+Each number represents a bit. Each line represents 4 bytes.
+
+```
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                 "PST" in ASCII                |    is auth    |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                           signature                           |  <- Only present if "is auth" is true.
+                               ...
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  <- Below this line, all data is encrypted if "is auth" is true
+|           player id           |          request type         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                              data                             |
+                               ...
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+"PST": 3 bytes
+	The first three bytes are the letters "PST". This uniquely identifies postman packets.
+
+is auth: 1 byte
+	The fourth byte is a boolean that represents whether the packet is authenticated. This is taken to be false if the byte is all 0s and True otherwise.
+	If this field is false, the packet is valid only if at least one of the following is true:
+		- This packet's request does not require authentication, i.e. it is a request to download the game's map.
+		- The receiving thread does not expect authentication, i.e. it is a local connection not over a real TCP socket.
+	
+	If this field is true, the packet is only valid if the receiving thread expects authentication.
+
+signature: 128 bytes
+	This field is only present if "is auth" is true. It contains the PKCS#1 1.5 signature of the SHA256 hash of the remainder of the packet.
+
+data: variable
+	This field contains the fields associated with the request type as detailed below.
+
+### Requests
+
+Each request has an associated ID, which is what is found in the header "request" field, and a specification for what must appear in the "data" field. The contents of the data field are typically different depending on whether the packet is being sent by the client or server.
+
+#### Info
+
+ID: 1
+
+Description: Request info on a server. This packet can only be sent by unauthenticated clients, i.e. prior to joining the server. Therfore is_auth must always be false. A server will only send an info packet in response to an info packet received by a client.
+
+Data if sent by client: None
+
+Data if sent by server:
+
+```
+Not yet implemented
+```
+
+#### Join
+
+ID: 2
+
+Description: Begins the process of joining a server. is_auth must be false. 
+
+Data if sent by server: Never sent by the server.
+
+Data if sent by client:
+
+```
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                          public key                           |  <- Is actually 128 bytes
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+public key:  128 bytes
+	The client's 1024 bit public RSA key. Must be omitted if the connection is not to be authenticated.
+
+#### Map
+
+ID: 3
+
+Description: Sent by the server after a player joins. Includes all towns with their name, zip code, location, and connections. This information can be used to create the player's map. The data field begins with a 2-byte field specifying the number of towns, followed by a 42-byte town descriptor for each town. The total size of the data field in bytes is 2+42\*num_towns. Each town 
+
+Data if sent by client: Never sent by the client.
+
+Data if sent by server:
+
+```
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|           num towns           |         town zip code         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|        town x position        |        town y position        |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                           town name                           |
+                               ...
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        additional towns                       |
+                               ...
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+num towns: 2 bytes
+	The number of towns in the map. This field is followed by this many 42-byte town descriptors.
+
+town zip code: 2 bytes
+	The town's zip code as an unsigned short.
+
+town x position: 2 bytes
+	The town's x position as a signed short.
+
+town y position: 2 bytes
+	The town's y position as a signed short.
+
+town name: 32 bytes
+	The town's name as a null-terminated string.
+
+## Roadmap
+
+### Version 1.0.0
+
+- Programming
+	- Full world generation ✓
+	
+	- Full mail simulation
+		- Mail generation
+			- Mail occasionally damaged
+			- Mail occasionally has typo'd address (can be sent or RTS'd)
+			- Mail occasionally has completely wrong address (must be RTS'd)
+			- Mail occasionally has insufficient postage
+			- Mail occasionally does not have sender address
+		
+		- Mail routing ✓
+		- Notification of incorrectly routed mail. ✓
+		- Notification of routing of damaged mail.
+		- Notification of routing mail with due postage.
+		- Mail damaged randomly
+		- Mail repaired
+		- Mail RTS'd w/ "Insufficient Postage", "Cannot be delivered as addressed"
+		
+		- Senders occasionally submit recovery requests.
+		- Recovery requests automatically handled by POs, routed as needed.
+		
+	- Good looking map
+		- Curved town connection lines
+		- Placing random art assets in vacant spots
+	
+	- Client-Server protocol
+		- If server settings specify singleplayer, game creates server and player object. Player object contacts server and binds to a thread. The server generates the world and begins playthrough.
+	
+	- Player Interface
+		- Player presented with queue of mail items.
+		- Player can route mail
+		- Player can set items aside (A way for the player to handle items they have not been trained to handle, will be handled automatically at the end of the day)
+		- Player can RTS and stamp with a reason for doing so
+		- Player can place RTS's mail that lacks a return address into recovery
+		- Player can view the contents of local boxes.
+		- Player can open mail
+
+- Art
+	- At least passable art for all assets
+	- Good-Looking Map
+		- Map background
+		- Assets for random placement (mountains, hills, lakes? drawn aesthetic)
+
+- Writing
+	- Story Mode
+	
+### Version 1.5.0
+
+- Programming
+	- Additional gamemodes
+		- Endurance
+
+### Version 2.0.0
+
+- Programming
+	- Multiplayer Support
+		- Server supports TCP connections for multiplayer games and can create TCP-bound threads
+	
+	- Multiplayer-based world generation
+		- Improve connectivity for uniform experience between 
+
+#### Version 2.5.0
+
+- Programming
+	- Dedicated Multiplayer Server Support
+
+- Writing
+	- Multiplayer Story Mode
+

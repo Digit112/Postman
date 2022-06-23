@@ -1,5 +1,6 @@
 import math
 import random
+import threading
 
 from classes import *
 	
@@ -32,6 +33,7 @@ def add_mail_to_pq(m):
 				m.current.player_queue.append(m)
 				m.is_auto = False
 				return
+	
 
 while True:
 	# Get all mail for the players to handle for each player-controlled PO

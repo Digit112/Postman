@@ -60,6 +60,9 @@ class postman:
 		# Initialize routing table
 		self.routing = {}
 	
+	# Binds a receive and send buffer to a thread. If authentication is True, all communication are encrypted.
+	def bind(self, send, recv, authentication):
+	
 	# Generate a random piece of mail somewhere.
 	def gen_mail(self):
 		sender = random.choice(self.senders)
@@ -471,3 +474,4 @@ class mail:
 	def repair(self):
 		if self.repair_lvl < self.damage_lvl:
 			self.repair_lvl += 1
+
