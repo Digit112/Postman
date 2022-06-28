@@ -1,6 +1,6 @@
-{
-	0: {
-		"prob_sender_short_pays": 0.02,
+[
+	{
+		"prob_sender_shortpays": 0.02,
 		"prob_sender_damages_mail": 0.02,
 		"prob_router_damages_mail": 0.02,
 		
@@ -10,4 +10,4 @@
 		"mail_quota": 10,
 		"mail_limit": 20
 	}
-}
+]

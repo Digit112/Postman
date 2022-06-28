@@ -303,18 +303,18 @@ town name: 32 bytes
 	
 	- Full mail simulation
 		- Mail generation
-			- Mail occasionally damaged
+			- Mail occasionally damaged ✓
 			- Mail occasionally has typo'd address (can be sent or RTS'd)
-			- Mail occasionally has completely wrong address (must be RTS'd)
-			- Mail occasionally has insufficient postage
+			- Mail occasionally has completely invalid address (must be RTS'd)
+			- Mail occasionally has insufficient postage ✓
 			- Mail occasionally does not have sender address
 		
 		- Mail routing ✓
 		- Notification of incorrectly routed mail. ✓
-		- Notification of routing of damaged mail.
+		- Notification of routing of damaged mail. ✓
 		- Notification of routing mail with due postage.
-		- Mail damaged randomly
-		- Mail repaired
+		- Mail damaged randomly ✓
+		- Mail repaired ✓
 		- Mail RTS'd w/ "Insufficient Postage", "Cannot be delivered as addressed"
 		
 		- Senders occasionally submit recovery requests.

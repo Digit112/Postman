@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 from PIL import Image, ImageDraw, ImageFont
 
+# This file implements the mail simulation backend
+
 # Function that reads a json file and returns an object representing the data
 def load_json(fn):
 	fin = open(fn, "r")
@@ -15,38 +17,47 @@ def load_json(fn):
 # This class tracks the gamestate, including a list of all senders, the post network shape, and all mail in transit.
 class postman:
 	# The postman initializer creates the game map and all the senders.
-	def __init__(self):
+	def __init__(self, serv):
 		# Load settings
 		self.settings = load_json("settings.json")
 		
+		# Load server settings
+		self.config = load_json("servers/" + serv + "/server.json")
+		
 		# Load list of days (rulesets)
-		self.days = load_json("days.json")
+		self.days = load_json("servers/" + serv + "/days.json")
 		
 		# Set default day
-		self.day = self.days.standard
+		self.day = self.days[0]
 
 		# Load localization file
 		self.strings = load_json("localization/" + self.settings.language + ".json")
 		
+		# Each new piece of mail has a unique ID. This number tracks what the next available ID is.
+		self.next_mail_ID = random.randrange(0, 1000)
+		
 		# Load town name list
-		fin = open("names/town_names.txt", "r")
+		fin = open("servers/" + serv + "/names/town_names.txt", "r")
 		self.town_names = fin.read().split("\n")
 		fin.close()
 		
 		# Load street name list
-		fin = open("names/street_names.txt", "r")
+		fin = open("servers/" + serv + "/names/street_names.txt", "r")
 		self.street_names = fin.read().split("\n")
 		fin.close()
 		
 		# Load first name list
-		fin = open("names/first_names.txt", "r")
+		fin = open("servers/" + serv + "/names/first_names.txt", "r")
 		self.first_names = fin.read().split("\n")
 		fin.close()
 		
 		# Load last name list
-		fin = open("names/last_names.txt", "r")
+		fin = open("servers/" + serv + "/names/last_names.txt", "r")
 		self.last_names = fin.read().split("\n")
 		fin.close()
+		
+		# Start the game in simulation mode. Player input is ignored at this time.
+		self.is_simulating = True
 		
 		# Initialize list of all senders in the game
 		self.senders = []
@@ -59,9 +70,6 @@ class postman:
 		
 		# Initialize routing table
 		self.routing = {}
-	
-	# Binds a receive and send buffer to a thread. If authentication is True, all communication are encrypted.
-	def bind(self, send, recv, authentication):
 	
 	# Generate a random piece of mail somewhere.
 	def gen_mail(self):
@@ -80,8 +88,6 @@ class postman:
 				# Ensure the recipient is not the sender
 				if recipient != sender:
 					break
-					
-				print("sender is recipient (1)")
 		
 		# If both previous conditions failed, just pick a random person anywhere.
 		else:
@@ -91,10 +97,8 @@ class postman:
 				# Ensure the recipient is not the sender
 				if recipient != sender:
 					break
-					
-				print("sender is recipient (2)")
 		
-		mail_item = mail(self, sender, recipient)
+		mail_item = mail(self, sender, recipient, False)
 		self.post.append(mail_item)
 		sender.add_mail(mail_item)
 			
@@ -262,6 +266,11 @@ class postman:
 	def connect_towns(a, b):
 		a.neighbors.append(b)
 		b.neighbors.append(a)
+	
+	# Gets the next available mail ID and increments it.
+	def get_mail_ID(self):
+		self.next_mail_ID = (self.next_mail_ID + 1) % 100000
+		return self.next_mail_ID
 
 # Represents a town, which has one post office, a zip code, and contains streets which contain houses which contain senders.
 class town:
@@ -309,6 +318,9 @@ class town:
 		num_streets = max(2, round(random.gauss(5.5, 0.7) * (pm.settings.world_gen.town_size_mul*pop_mul)**(1/3)))
 		for i in range(num_streets):
 			self.streets.append(street(pm, pop_mul, self))
+		
+		# Sort streets alphabetically
+		self.streets.sort(key = lambda a: a.name)
 	
 	# mail.handle() calls this function on towns which it detects have made a mistake. This adds the notification to a queue.
 	def notify(self, notifier, text):
@@ -339,13 +351,24 @@ class street:
 	def __init__(self, pm, pop_mul, town):
 		self.town = town
 		
-		# Get random street name from street name list
-		self.name = random.choice(pm.street_names)
+		# Get unique random street name from street name list
+		do_gen_name = True
+		while do_gen_name:
+			self.name = random.choice(pm.street_names)
+			
+			do_gen_name = False
+			for s in town.streets:
+				if self.name == s.name:
+					do_gen_name = True
+					break
 		
 		self.houses = []
 		num_houses = max(2, round(random.gauss(8, 1.3) * (pm.settings.world_gen.town_size_mul*pop_mul)**(1/3)))
 		for i in range(num_houses):
 			self.houses.append(house(pm, pop_mul, town, self))
+		
+		# Sort houses by numbers
+		self.houses.sort(key = lambda a: a.number)
 	
 	def get_address(self):
 		return self.name + "\n" + self.town.get_address()
@@ -355,8 +378,16 @@ class house:
 	def __init__(self, pm, pop_mul, town, street):
 		self.street = street
 		
-		# Get a random number for the street address
-		self.number = random.randint(1, 55)
+		# Get a unique random number for the street address
+		do_gen_num = True
+		while do_gen_num:
+			self.number = random.randint(1, 55)
+			
+			do_gen_num = False
+			for h in street.houses:
+				if h.number == self.number:
+					do_gen_num = True
+					break
 		
 		self.senders = []
 		if random.uniform(0, 1) > 0.05:
@@ -366,6 +397,10 @@ class house:
 	
 	def get_address(self):
 		return str(self.number) + " " + self.street.get_address()
+	
+	# Houses ignore notifications
+	def notify(self, notifier, text):
+		pass
 
 # Represents a sender
 class sender:
@@ -398,23 +433,45 @@ class sender:
 		
 # Represents a piece of mail.
 class mail:
+	# Randomly creates a piece of mail from the sender to the recipient. is_story should be set to None if it is not story mail or to the name of the story mail item to send.
 	def __init__(self, pm, sender, recipient, is_story):
 		self.sender = sender
 		self.recipient = recipient
+		
+		self.srce_zip = sender.town.zip_code
+		self.dest_zip = recipient.town.zip_code
+		
+		self.ID = pm.get_mail_ID()
 		
 		self.srce = sender.get_address()
 		self.dest = recipient.get_address()
 		
 		self.is_story = is_story
 		
-		self.damage_lvl = 0
+		# Mail has a random chance of not having due postage
+		if random.uniform(0, 1) < pm.day.prob_sender_shortpays:
+			if self.srce_zip != self.dest_zip and random.uniform(0, 1) < 0.5:
+				self.stamp = 1
+			else:
+				self.stamp = 0
+		elif self.srce_zip != self.dest_zip:
+			self.stamp = 2
+		else:
+			self.stamp = 1
+		
+		# Some mail randomly generates with 1 level of damage
+		if random.uniform(0, 1) < pm.day.prob_sender_damages_mail:
+			self.damage_lvl = 1
+		else:
+			self.damage_lvl = 0
+			
 		self.repair_lvl = 0
 		
 		# Whether this mail is handled automatically. If False, it is handled by a player.
 		self.is_auto = True
 		
 		# Where the letter was last, where it is now, and where it has been sent towards.
-		self.previous = None
+		self.previous = sender.house
 		self.current = sender.town
 		self.following = None
 		
@@ -424,41 +481,63 @@ class mail:
 	# Set self.following to the appropriate neighbor.
 	def handle(self):
 		# If mail is at a house...
-		if type(self.current) == house:
+		if type(self.current) is house:
+			# Houses notify of damaged mail.
+			if self.damage_lvl > self.repair_lvl:
+				self.previous.notify(self.current, "Mail arrived to residence damaged.")
+				
 			# If mail is at the wrong house...
 			if self.current != self.recipient.house:
 				# Send to post office & notify
 				self.following = self.current.street.town
-				self.current.stret.town.notify(self.current, "This mail isn't addressed to me!")
+				self.current.street.town.notify(self.current, "Mail routed to incorrect residence.")
+				return False
 				
 			# Otherwise, remove mail from the system. The sender will be notified immeediately by the magic of programming.
 			else:
-				try:
-					self.sender.in_transit.remove(self)
-				except ValueError:
-					print("Notified sender of arrival of mail they did not have in transit. (This state should be unreachable).")
-				
-				try:
-					self.sender.pm.post.remove(self)
-				except ValueError:
-					print("What the fuck?")
+				self.sender.in_transit.remove(self)
+				self.sender.pm.post.remove(self)
+				return True
 		
 		# Otherwise, mail is at a town.
 		else:
+			# Routers repair mail and notify senders.
+			if self.damage_lvl > self.repair_lvl:
+				self.previous.notify(self.current, "Mail arrived to PO damaged.")
+				self.repair()
+			
+			# Mail has a small chance of being damaged by the router.
+			if random.uniform(0, 1) < self.sender.pm.day.prob_router_damages_mail:
+				self.damage()
+			
 			# If mail is in the town of the destination, forward it to the correct home
 			if self.recipient.town.zip_code == self.current.zip_code:
 				self.following = self.recipient.house
+				return False
 			
-			# Otherwise, route the mail in the correct direction. Loop over neighbors until one is found that is nearer to the destination.
-			my_dis = self.sender.pm.routing[self.current.zip_code][self.recipient.town.zip_code]
-			for n in self.current.neighbors:
-				ne_dis = self.sender.pm.routing[n.zip_code][self.recipient.town.zip_code]
-				if ne_dis < my_dis:
-					self.following = n
-					break
+			# Otherwise, route mail towards its destination
+			else:
+				# Otherwise, route the mail in the correct direction. Loop over neighbors until one is found that is nearer to the destination.
+				my_dis = self.sender.pm.routing[self.current.zip_code][self.recipient.town.zip_code]
+				for n in self.current.neighbors:
+					ne_dis = self.sender.pm.routing[n.zip_code][self.recipient.town.zip_code]
+					if ne_dis < my_dis:
+						self.following = n
+						
+						# If mail should be routed to the place that routed it to this PO, notify that the mail was sent to this PO in error.
+						if self.previous == self.following:
+							self.following.notify(self.current, "Mail Routed in Error.")
+						
+						return False
+				
+			print("Could not route " + self.get_details())
+			return False
 	
 	# Move this mail-item towards its destination.
 	def advance(self):
+		if self.following is None:
+			print("Fatal, MI not routed: " + self.get_details())
+			
 		self.previous = self.current
 		self.current = self.following
 		self.following = None
@@ -474,4 +553,7 @@ class mail:
 	def repair(self):
 		if self.repair_lvl < self.damage_lvl:
 			self.repair_lvl += 1
-
+	
+	# Gets a string representing this piece of mail
+	def get_details(self):
+		return "#%05d | %s -> %s | %d/%d | %d" % (self.ID, self.srce.replace("\n", ", "), self.dest.replace("\n", ", "), self.damage_lvl, self.repair_lvl, self.stamp)
