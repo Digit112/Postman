@@ -21,13 +21,13 @@ class postman:
 		# Load settings
 		self.settings = load_json("settings.json")
 		
-		# Load server settings
-		self.config = load_json("servers/" + serv + "/server.json")
-		
 		# Load list of days (rulesets)
 		self.days = load_json("servers/" + serv + "/days.json")
 		
-		# Set default day
+		# Load server settings
+		self.srv = load_json("servers/" + serv + "/server.json")
+		
+		# Set starting day
 		self.day = self.days[0]
 
 		# Load localization file
@@ -430,7 +430,28 @@ class sender:
 	# If a sender has not been notified for a while, they are liable to submit requests to locate mail.
 	def add_mail(self, mail):
 		self.in_transit.append(mail)
+
+# One instance of this class is held by each mail item. Its values are set by calling mail.handle and it describes what should be done to this piece of mail at the end of the day
+# and if it has any errors.
+class mail_action:
+	def __init__(self):
+		self.reset()
+	
+	def reset(self):
+		# If this mail was routed in error.
+		self.routing_error = False
 		
+		# If this mail was delivered to the wrong address.
+		self.delivery_error = False
+		
+		# If this mail was delivered to a PO damaged.
+		self.routed_damaged = False
+		
+		# If this mail was delivered damaged.
+		self.delivered_damaged = False
+		
+		self.following = None
+
 # Represents a piece of mail.
 class mail:
 	# Randomly creates a piece of mail from the sender to the recipient. is_story should be set to None if it is not story mail or to the name of the story mail item to send.
@@ -448,8 +469,10 @@ class mail:
 		
 		self.is_story = is_story
 		
+		self.act = mail_action()
+		
 		# Mail has a random chance of not having due postage
-		if random.uniform(0, 1) < pm.day.prob_sender_shortpays:
+		if random.uniform(0, 1) < pm.srv.prob_sender_shortpays:
 			if self.srce_zip != self.dest_zip and random.uniform(0, 1) < 0.5:
 				self.stamp = 1
 			else:
@@ -460,7 +483,7 @@ class mail:
 			self.stamp = 1
 		
 		# Some mail randomly generates with 1 level of damage
-		if random.uniform(0, 1) < pm.day.prob_sender_damages_mail:
+		if random.uniform(0, 1) < pm.srv.prob_sender_damages_mail:
 			self.damage_lvl = 1
 		else:
 			self.damage_lvl = 0
@@ -470,27 +493,29 @@ class mail:
 		# Whether this mail is handled automatically. If False, it is handled by a player.
 		self.is_auto = True
 		
-		# Where the letter was last, where it is now, and where it has been sent towards.
+		# Where the letter was last, where it is now, and where it will be on the next day.
 		self.previous = sender.house
 		self.current = sender.town
-		self.following = None
 		
 		# Tracks a piece of mail's age. Incremented by mail.advance()
 		self.age = 0
 	
-	# Set self.following to the appropriate neighbor.
+	# Set self.act based on what should be done when advancing this mail.
 	def handle(self):
+		# Reset the action object.
+		self.act.reset()
+		
 		# If mail is at a house...
 		if type(self.current) is house:
 			# Houses notify of damaged mail.
 			if self.damage_lvl > self.repair_lvl:
-				self.previous.notify(self.current, "Mail arrived to residence damaged.")
+				self.act.delivered_damaged = True
 				
 			# If mail is at the wrong house...
 			if self.current != self.recipient.house:
 				# Send to post office & notify
-				self.following = self.current.street.town
-				self.current.street.town.notify(self.current, "Mail routed to incorrect residence.")
+				self.act.following = self.current.street.town
+				self.act.delivery_error = True
 				return False
 				
 			# Otherwise, remove mail from the system. The sender will be notified immeediately by the magic of programming.
@@ -503,16 +528,15 @@ class mail:
 		else:
 			# Routers repair mail and notify senders.
 			if self.damage_lvl > self.repair_lvl:
-				self.previous.notify(self.current, "Mail arrived to PO damaged.")
-				self.repair()
+				self.act.routed_damaged = True
 			
 			# Mail has a small chance of being damaged by the router.
-			if random.uniform(0, 1) < self.sender.pm.day.prob_router_damages_mail:
+			if random.uniform(0, 1) < self.sender.pm.srv.prob_router_damages_mail:
 				self.damage()
 			
 			# If mail is in the town of the destination, forward it to the correct home
 			if self.recipient.town.zip_code == self.current.zip_code:
-				self.following = self.recipient.house
+				self.act.following = self.recipient.house
 				return False
 			
 			# Otherwise, route mail towards its destination
@@ -522,11 +546,11 @@ class mail:
 				for n in self.current.neighbors:
 					ne_dis = self.sender.pm.routing[n.zip_code][self.recipient.town.zip_code]
 					if ne_dis < my_dis:
-						self.following = n
+						self.act.following = n
 						
 						# If mail should be routed to the place that routed it to this PO, notify that the mail was sent to this PO in error.
-						if self.previous == self.following:
-							self.following.notify(self.current, "Mail Routed in Error.")
+						if self.previous == self.act.following:
+							self.act.routing_error = True
 						
 						return False
 				
@@ -535,21 +559,33 @@ class mail:
 	
 	# Move this mail-item towards its destination.
 	def advance(self):
-		if self.following is None:
+		if self.act.following is None:
 			print("Fatal, MI not routed: " + self.get_details())
+		
+		if self.act.delivery_error:
+			self.current.street.town.notify(self.current, "Mail routed to incorrect residence.")
+		
+		if self.act.routing_error:
+			self.act.following.notify(self.current, "Mail Routed in Error.")
+		
+		if self.act.delivered_damaged:
+			self.previous.notify(self.current, "Mail arrived to residence damaged.")
+		
+		if self.act.routed_damaged:
+			self.previous.notify(self.current, "Mail arrived to PO damaged.")
+			self.repair()
 			
 		self.previous = self.current
-		self.current = self.following
-		self.following = None
+		self.current = self.act.following
 		
 		self.age += 1
 	
-	# Increase damage value of this mail, up to a maximum of 3.
+	# Increment the damage value of this mail, up to a maximum of 3.
 	def damage(self):
 		if self.damage_lvl < 3:
 			self.damage_lvl += 1
 	
-	# Increase repair value of this mail, up to the current damage value.
+	# Increment the repair value of this mail, up to the current damage value.
 	def repair(self):
 		if self.repair_lvl < self.damage_lvl:
 			self.repair_lvl += 1

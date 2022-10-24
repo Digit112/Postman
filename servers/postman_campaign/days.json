@@ -1,0 +1,10 @@
+[
+	{
+		"mail_to_next_town": false,
+		"postage_paid": false,
+		"postage_sufficient": false,
+		"repair_mail": false,
+		"forward_mail": false,
+		"recover_mail": false
+	}
+]

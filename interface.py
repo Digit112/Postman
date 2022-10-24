@@ -2,19 +2,9 @@
 
 # This file implements the interface between the server (simulation) and client (player interface)
 class pm_cli:
-	# if is_internal, this client is connecting to the passed pm object and interacting with it via function calls.
-	# otherwise, this client is contacting the server over TCP instead at the provided TCPIP address. Only one of these must be a valid value.
-	def __init__(self, is_internal, pm, addr):
-		self.is_internal = is_internal
-		
-		if is_internal:
-			self.pm = pm
-			self.player_town = pm.towns[0]
-			
-		else:
-			# When implemented, this will create a local pm object by downloaded all necessary information from the server at addr.
-			print("Multiplayer not yet implemented.")
-			exit()
+	def __init__(self, pm, addr):
+		self.pm = pm
+		self.player_town = pm.towns[0]
 	
 	# Handle player input on a loop. This should be called in a seperate thread. Thread locks are used to prevent race conditions.
 	# If use_gui, load and handle input via the gui interface. Otherwise, use the command line interface
@@ -80,7 +70,7 @@ class pm_cli:
 					elif inp[0] == "get_all_mail" or inp[0] == "gam":
 						for m_i in range(len(self.player_town.player_queue)):
 							m = self.player_town.player_queue[m_i]
-							print(str(m_i) + ", " + ("Unrouted" if m.following is None else "  Routed") + ": " + m.get_details())
+							print(str(m_i) + ", " + ("Unrouted" if m.act.following is None else "  Routed") + ": " + m.get_details())
 					
 					# Get the details of a mail item
 					elif inp[0] == "get_mail_item" or inp[0] == "gmi":
@@ -97,7 +87,7 @@ class pm_cli:
 						print(str(m_i) + ": " + m.srce.replace("\n", ", ") + " -> " + m.dest.replace("\n", ", "))
 						print("damage: " + str(m.damage_lvl) + ", repair: " + str(m.repair_lvl) + ", postage: " + str(m.stamp))
 						print("Mail's previous location: " + m.previous.get_address().replace("\n", ", "))
-						print("Mail's next location: " + ("Not yet specified" if m.following is None else m.following.get_address().replace("\n", ", ")))
+						print("Mail's next location: " + ("Not yet specified" if m.act.following is None else m.act.following.get_address().replace("\n", ", ")))
 					
 					# List all available locations that can be routed to
 					elif inp[0] == "get_routables" or inp[0] == "grs":
@@ -137,7 +127,7 @@ class pm_cli:
 							boxes[inp[2]].append(self.player_town.player_queue[inp[1]])
 							
 							# Set the mail item's next location
-							self.player_town.player_queue[inp[1]].following = get_place_by_name[inp[2]]
+							self.player_town.player_queue[inp[1]].act.following = get_place_by_name[inp[2]]
 						except KeyError:
 							print("Location " + inp[2] + " specified does not exist.")
 							continue
